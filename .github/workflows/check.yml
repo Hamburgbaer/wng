@@ -1,0 +1,44 @@
+name: Behrendt Monitor
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # alle 10 Minuten (GitHub kann das um einige Minuten verzögern)
+  workflow_dispatch:          # manueller Start über den Button "Run workflow"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: behrendt-monitor
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Abhängigkeiten installieren
+        run: |
+          pip install playwright requests
+          playwright install --with-deps chromium
+
+      - name: Seite prüfen
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python behrendt_monitor.py --once
+
+      - name: Zustand speichern
+        run: |
+          git config user.name "monitor-bot"
+          git config user.email "monitor-bot@users.noreply.github.com"
+          git add behrendt_state.json
+          git diff --staged --quiet || (git commit -m "Update state" && git push)
